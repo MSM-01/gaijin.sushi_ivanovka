@@ -1,0 +1,9 @@
+node_modules
+dist
+*.local
+
+# Backend secrets and build output
+server/.env
+server/node_modules/
+server/dist/
+server/.prisma/

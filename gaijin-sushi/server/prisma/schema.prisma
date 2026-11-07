@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderStatus {
+  CREATED
+  PAID
+  SENT_TO_POS
+  POS_ERROR
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  NOT_SENT
+  QUEUED
+  SENDING
+  ACCEPTED
+  ERROR
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sessions     AdminSession[]
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  adminId   String
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model Category {
+  id             String    @id @default(cuid())
+  externalId     String?   @unique
+  nameRu         String
+  nameEn         String
+  sortOrder      Int       @default(0)
+  active         Boolean   @default(true)
+  products       Product[]
+  updatedAt      DateTime  @updatedAt
+}
+
+model Product {
+  id             String    @id @default(cuid())
+  externalId     String?   @unique
+  categoryId     String
+  category       Category  @relation(fields: [categoryId], references: [id])
+  nameRu         String
+  nameEn         String
+  descriptionRu  String    @default("")
+  descriptionEn  String    @default("")
+  priceKgs       Int
+  imageUrl       String?
+  available      Boolean   @default(true)
+  active         Boolean   @default(true)
+  sortOrder      Int       @default(0)
+  updatedAt      DateTime  @updatedAt
+}
+
+model DiningTable {
+  id        String   @id @default(cuid())
+  number    Int      @unique
+  active    Boolean  @default(true)
+  orders    Order[]
+}
+
+model Order {
+  id                String         @id @default(cuid())
+  publicNumber      String         @unique
+  tableId           String?
+  table             DiningTable?   @relation(fields: [tableId], references: [id])
+  tableNumber       Int?
+  customerComment   String         @default("")
+  subtotalKgs       Int
+  totalKgs          Int
+  paymentStatus     PaymentStatus  @default(PENDING)
+  orderStatus       OrderStatus    @default(CREATED)
+  deliveryStatus    DeliveryStatus @default(NOT_SENT)
+  paymentProviderId String?        @unique
+  palomaOrderId     String?        @unique
+  paidAt            DateTime?
+  sentToPalomaAt    DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  items             OrderItem[]
+  events            IntegrationEvent[]
+}
+
+model OrderItem {
+  id              String  @id @default(cuid())
+  orderId         String
+  order           Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  externalProductId String?
+  nameRu          String
+  nameEn          String
+  quantity        Int
+  unitPriceKgs    Int
+  lineTotalKgs    Int
+}
+
+model IntegrationEvent {
+  id          String   @id @default(cuid())
+  orderId     String?
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  provider    String
+  eventType   String
+  idempotencyKey String @unique
+  status      String
+  requestJson Json?
+  responseJson Json?
+  error       String?
+  createdAt   DateTime @default(now())
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  externalId  String
+  receivedAt  DateTime @default(now())
+  processedAt DateTime?
+  @@unique([provider, externalId])
+}
