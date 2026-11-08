@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 255 255 255;
+  --surface: 244 244 246;
+  --ink: 17 17 19;
+  --mute: 112 112 122;
+  --line: 230 230 235;
+}
+.dark {
+  --bg: 14 14 16;
+  --surface: 29 29 33;
+  --ink: 245 245 247;
+  --mute: 158 158 168;
+  --line: 45 45 52;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+    overflow-x: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  button {
+    @apply cursor-pointer;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex min-h-[52px] items-center justify-center gap-2 rounded-2xl px-6 text-base font-bold transition active:scale-[0.98];
+  }
+  .btn-primary {
+    @apply btn bg-brand text-white shadow-lg shadow-brand/25 hover:bg-brand-dark;
+  }
+  .btn-secondary {
+    @apply btn bg-surface text-ink hover:bg-line;
+  }
+  .icon-btn {
+    @apply inline-flex h-11 w-11 items-center justify-center rounded-full bg-surface text-ink transition hover:bg-line active:scale-95;
+  }
+  .admin-label {
+    @apply flex flex-col gap-2 text-sm font-bold;
+  }
+  .admin-input {
+    @apply min-h-12 w-full rounded-xl border border-line bg-bg px-3 py-2 font-medium text-ink outline-none focus:border-brand;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes sheet-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes slide-right {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes cart-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(16px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+.page-enter { animation: page-in 0.35s ease both; }
+.fade-in { animation: fade-in 0.2s ease both; }
+.sheet-up { animation: sheet-up 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.slide-right { animation: slide-right 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.toast-in { animation: toast-in 0.25s ease both; }
+.pop { animation: pop 0.3s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  @page { margin: 10mm; }
+  html, body { background: #fff !important; }
+  .page-enter { animation: none; }
+}
+
+/* Плавающая кнопка корзины */
+.cart-float {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: #E8283C;
+  color: #fff;
+  box-shadow: 0 16px 40px -8px rgb(232 40 60 / 0.45);
+  animation: cart-in 0.3s ease both;
+}
+.cart-float:active { filter: brightness(0.92); }
+@media (max-width: 480px) {
+  .cart-float { width: calc(100vw - 32px); }
+}
