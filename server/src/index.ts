@@ -23,6 +23,43 @@ const paloma = new Paloma365Adapter();
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'gaijin-sushi-api' }));
 
+function detectImageMime(data: Buffer): string | null {
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg';
+  if (
+    data.length >= 8 &&
+    data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
+    return 'image/png';
+  }
+  if (
+    data.length >= 12 &&
+    data.toString('ascii', 0, 4) === 'RIFF' &&
+    data.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
+
+app.get('/api/images/:id', async (req, res) => {
+  const id = getRouteId(req, res);
+  if (!id) return;
+  try {
+    const image = await prisma.image.findUnique({
+      where: { id },
+      select: { mimeType: true, data: true },
+    });
+    if (!image) return res.status(404).json({ error: 'Изображение не найдено.' });
+    res.setHeader('Content-Type', image.mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.end(Buffer.from(image.data));
+  } catch (error) {
+    console.error('image.get', error);
+    res.status(500).json({ error: 'Не удалось загрузить изображение.' });
+  }
+});
+
 const adminCookie = 'gaijin_admin';
 const sessionDays = Math.min(30, Math.max(1, Number(process.env.ADMIN_SESSION_DAYS ?? 7)));
 const loginLimiter = rateLimit({
@@ -70,6 +107,33 @@ const requireAdmin: express.RequestHandler = async (req, res, next) => {
     res.status(500).json({ error: 'Не удалось проверить сессию.' });
   }
 };
+
+app.post(
+  '/api/admin/images',
+  requireAdmin,
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '3mb' }),
+  async (req, res) => {
+    if (!Buffer.isBuffer(req.body)) {
+      return res.status(415).json({ error: 'Поддерживаются только изображения JPEG, PNG и WebP.' });
+    }
+    const detectedMime = detectImageMime(req.body);
+    const declaredMime = req.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+    if (!detectedMime || detectedMime !== declaredMime) {
+      return res.status(415).json({ error: 'Тип файла не соответствует содержимому изображения.' });
+    }
+
+    try {
+      const image = await prisma.image.create({
+        data: { mimeType: detectedMime, data: Uint8Array.from(req.body) },
+        select: { id: true },
+      });
+      res.status(201).json({ url: `/api/images/${image.id}` });
+    } catch (error) {
+      console.error('admin.image.create', error);
+      res.status(500).json({ error: 'Не удалось сохранить изображение.' });
+    }
+  },
+);
 
 const loginSchema = z.object({
   username: z.string().trim().min(1).max(100),

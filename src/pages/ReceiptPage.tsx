@@ -15,6 +15,7 @@ import Logo from '../components/Logo';
 import { useCart, type Order } from '../store/cart';
 import { useMenuStore } from '../store/menu';
 import { useI18n } from '../i18n/useI18n';
+import { INFO } from '../data/info';
 
 const SIZES = [14, 16, 18, 20, 24, 28, 32];
 const SIZE_KEY = 'gaijin-receipt-size';
@@ -110,7 +111,8 @@ export default function ReceiptPage() {
     }),
     `${t('receipt.total')}: ${money(order.total)}`,
   ].join('\n');
-  const whatsappUrl = `https://wa.me/996554600554?text=${encodeURIComponent(whatsappMessage)}`;
+  const whatsappNumber = INFO.whatsapp.replace(/\D/g, '');
+  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(whatsappMessage)}`;
 
   const changeSize = (delta: number) => {
     const next = Math.min(SIZES.length - 1, Math.max(0, sizeIndex + delta));

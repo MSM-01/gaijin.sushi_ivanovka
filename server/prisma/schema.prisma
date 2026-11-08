@@ -83,6 +83,13 @@ model Product {
   updatedAt      DateTime  @updatedAt
 }
 
+model Image {
+  id        String   @id @default(cuid())
+  mimeType  String
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
 model DiningTable {
   id        String   @id @default(cuid())
   number    Int      @unique

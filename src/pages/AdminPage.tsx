@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { LogOut, Plus, Save, Trash2, X } from 'lucide-react';
-import { apiRequest } from '../lib/api';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { ImagePlus, LogOut, Plus, Save, Trash2, X } from 'lucide-react';
+import ProductImage from '../components/ProductImage';
+import { apiRequest, uploadBinary } from '../lib/api';
+import { compressImage } from '../lib/image';
+import { useI18n } from '../i18n/useI18n';
 import { useMenuStore } from '../store/menu';
 
 interface AdminCategory {
@@ -66,6 +69,7 @@ const blankProduct = (categoryId = ''): ProductForm => ({
 });
 
 export default function AdminPage() {
+  const { t } = useI18n();
   const [checkingSession, setCheckingSession] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
@@ -76,8 +80,17 @@ export default function AdminPage() {
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
+  const [imagePreview, setImagePreview] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const imageInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!imagePreview.startsWith('blob:')) return;
+    return () => URL.revokeObjectURL(imagePreview);
+  }, [imagePreview]);
 
   const loadCatalog = useCallback(async () => {
     const data = await apiRequest<Catalog>('/admin/catalog');
@@ -174,7 +187,38 @@ export default function AdminPage() {
       await useMenuStore.getState().refresh();
       setProductForm(blankProduct(catalog.categories[0]?.id ?? ''));
       setEditingProductId(null);
+      setImagePreview('');
     }, editingProductId ? 'Блюдо обновлено.' : 'Блюдо добавлено.');
+  };
+
+  const handleImageSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setImageUploadError('');
+    if (file.size > 20 * 1024 * 1024) {
+      setImageUploadError(t('admin.imageInputTooLarge'));
+      return;
+    }
+
+    setImagePreview(URL.createObjectURL(file));
+    setImageUploading(true);
+    try {
+      const compressed = await compressImage(file);
+      const result = await uploadBinary<{ url: string }>('/admin/images', compressed);
+      setProductForm((current) => ({ ...current, imageUrl: result.url }));
+      setImagePreview(result.url);
+    } catch (uploadError) {
+      if (uploadError instanceof Error && uploadError.message === 'image-decode') {
+        setImageUploadError(t('admin.imageDecodeError'));
+      } else if (uploadError instanceof Error && uploadError.message === 'image-too-large') {
+        setImageUploadError(t('admin.imageTooLarge'));
+      } else {
+        setImageUploadError(t('admin.imageUploadError'));
+      }
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   const editCategory = (category: AdminCategory) => {
@@ -200,6 +244,8 @@ export default function AdminPage() {
       active: product.active,
       sortOrder: product.sortOrder,
     });
+    setImagePreview(product.imageUrl ?? '');
+    setImageUploadError('');
     setEditingProductId(product.id);
   };
 
@@ -398,10 +444,49 @@ export default function AdminPage() {
                     {catalog.categories.map((category) => <option key={category.id} value={category.id}>{category.nameRu}</option>)}
                   </select>
                 </label>
-                <label className="admin-label sm:col-span-2">
-                  Ссылка на фото
-                  <input type="text" placeholder="https://… или /menu/photo.jpg" value={productForm.imageUrl} onChange={(event) => setProductForm({ ...productForm, imageUrl: event.target.value })} className="admin-input" />
-                </label>
+                <div className="space-y-3 sm:col-span-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input
+                      ref={imageInput}
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => void handleImageSelect(event)}
+                      className="sr-only"
+                      aria-label={t('admin.uploadImage')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => imageInput.current?.click()}
+                      disabled={imageUploading}
+                      className="btn-secondary min-h-12"
+                    >
+                      <ImagePlus size={19} />
+                      {imageUploading ? t('admin.imageUploading') : t('admin.uploadImage')}
+                    </button>
+                    {imageUploading && <span role="status" className="text-sm text-mute">{t('admin.imageUploading')}</span>}
+                  </div>
+                  {imageUploadError && <p role="alert" className="text-sm font-semibold text-brand">{imageUploadError}</p>}
+                  {(imagePreview || productForm.imageUrl) && (
+                    <ProductImage
+                      src={imagePreview || productForm.imageUrl}
+                      alt={t('admin.imagePreview')}
+                      className="h-40 w-full rounded-2xl sm:max-w-xs"
+                    />
+                  )}
+                  <label className="admin-label">
+                    Ссылка на фото
+                    <input
+                      type="text"
+                      placeholder="https://… или /menu/photo.jpg"
+                      value={productForm.imageUrl}
+                      onChange={(event) => {
+                        setProductForm({ ...productForm, imageUrl: event.target.value });
+                        setImagePreview('');
+                      }}
+                      className="admin-input"
+                    />
+                  </label>
+                </div>
                 <label className="admin-label">
                   Порядок в меню
                   <input type="number" min="0" value={productForm.sortOrder} onChange={(event) => setProductForm({ ...productForm, sortOrder: Number(event.target.value) })} className="admin-input" />
@@ -415,12 +500,12 @@ export default function AdminPage() {
                   Показывать блюдо в меню
                 </label>
                 <div className="flex gap-2 sm:col-span-2">
-                  <button type="submit" disabled={busy} className="btn-primary flex-1">
+                  <button type="submit" disabled={busy || imageUploading} className="btn-primary flex-1">
                     {editingProductId ? <Save size={18} /> : <Plus size={18} />}
                     {editingProductId ? 'Сохранить блюдо' : 'Добавить блюдо'}
                   </button>
                   {editingProductId && (
-                    <button type="button" onClick={() => { setEditingProductId(null); setProductForm(blankProduct(catalog.categories[0]?.id ?? '')); }} className="btn-secondary" aria-label="Отменить редактирование">
+                    <button type="button" onClick={() => { setEditingProductId(null); setProductForm(blankProduct(catalog.categories[0]?.id ?? '')); setImagePreview(''); setImageUploadError(''); }} className="btn-secondary" aria-label="Отменить редактирование">
                       <X size={18} />
                     </button>
                   )}

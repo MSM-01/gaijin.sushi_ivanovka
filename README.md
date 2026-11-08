@@ -6,7 +6,8 @@ React + TypeScript + Vite + Tailwind CSS + Zustand + React Router + Lucide.
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # frontend only: http://localhost:5173
+npm run dev:all    # frontend and API together, after database setup
 npm run build      # production-сборка в папку dist
 npm run preview    # просмотр production-сборки
 ```
@@ -37,15 +38,14 @@ npm run preview    # просмотр production-сборки
    ```
 
    `db:seed` добавляет начальные блюда только один раз и не перезаписывает изменения в базе.
-5. В одном терминале запустите API, в другом — сайт:
+5. После настройки базы и администратора запустите API и сайт одной командой из корневой папки проекта:
 
    ```bash
-   cd server && npm run dev
+   npm run dev:all
    ```
 
-   ```bash
-   npm run dev
-   ```
+   Если нужно запускать процессы отдельно, используйте `cd server && npm run dev` и `npm run dev`
+   в двух терминалах.
 
 Откройте [http://localhost:5173/admin](http://localhost:5173/admin) и войдите с заданными логином и паролем. В админке можно добавлять, редактировать, скрывать и удалять блюда и категории, менять цены и изображения, а также отмечать блюдо как временно недоступное. В меню посетителю покажется статус; нажатие на такую позицию покажет уведомление, что блюда пока нет.
 
@@ -73,6 +73,8 @@ npm run preview    # просмотр production-сборки
 Переводы интерфейса — `src/i18n/translations.ts`.
 
 Текущие блюда и категории после загрузки редактируются через `/admin`, а не через файл исходных данных.
+В админке фото можно загрузить с устройства или указать ссылку; загруженные фото хранятся в PostgreSQL,
+чтобы не пропадать после перезапуска или деплоя сервера.
 
 ## Структура
 
@@ -124,8 +126,9 @@ GitHub Actions автоматически проверит сборку сайт
 
 Для полноценной работы админки и обновляемого меню отдельно разверните API и PostgreSQL. При
 развёртывании API задайте переменные окружения `DATABASE_URL`, `ADMIN_USERNAME`,
-`ADMIN_PASSWORD` (не менее 12 символов), `FRONTEND_ORIGIN` (полный адрес опубликованного сайта)
-и `NODE_ENV=production`. Не используйте локальные пароли из примеров в production.
+`ADMIN_PASSWORD` (не менее 12 символов), `FRONTEND_ORIGIN` и `NODE_ENV=production`.
+Для текущего сайта используйте `FRONTEND_ORIGIN=https://gaijin-sushi-ivanovka-pex1.vercel.app`;
+добавляйте дополнительные origin через запятую. Не используйте локальные пароли из примеров в production.
 Примените миграции командой `cd server && npx prisma migrate deploy`, создайте администратора
 `cd server && npm run admin:create`, затем соберите и запустите API командами
 `npm run build` и `npm start` из папки `server`.

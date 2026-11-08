@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import { useI18n } from '../i18n/useI18n';
 
@@ -12,6 +12,8 @@ interface Props {
 export default function ProductImage({ src, alt, className = '', eager }: Props) {
   const [failed, setFailed] = useState(false);
   const { t } = useI18n();
+
+  useEffect(() => setFailed(false), [src]);
 
   if (failed) {
     return (
