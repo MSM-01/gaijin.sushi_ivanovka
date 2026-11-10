@@ -4,7 +4,7 @@ import { ArrowLeft, Maximize, MessageCircle, ShoppingBag, Trash2, X } from 'luci
 import CartItem from '../components/CartItem';
 import { useCart, useCartSummary } from '../store/cart';
 import { useI18n } from '../i18n/useI18n';
-import { INFO } from '../data/info';
+import { whatsappNumber as getWhatsappNumber, whatsappUrl } from '../lib/whatsapp';
 
 export default function CartPage() {
   const { t, money, tr } = useI18n();
@@ -14,10 +14,10 @@ export default function CartPage() {
   const createOrder = useCart((s) => s.createOrder);
   const [whatsappDialogOpen, setWhatsappDialogOpen] = useState(false);
   const [orderComment, setOrderComment] = useState('');
-  const whatsappNumber = INFO.whatsapp.replace(/\D/g, '');
+  const whatsappNumber = getWhatsappNumber();
 
   useEffect(() => {
-    if (!whatsappNumber) console.warn('WhatsApp is not configured in src/data/info.ts.');
+    if (!whatsappNumber) console.warn('WhatsApp не настроен в src/data/info.ts.');
   }, [whatsappNumber]);
 
   useEffect(() => {
@@ -61,20 +61,7 @@ export default function CartPage() {
   const handleWhatsAppSend = () => {
     const order = createOrder();
     if (!order) return;
-    const comment = orderComment.trim();
-    const message = [
-      'Заказ GAIJIN SUSHI',
-      `Номер заказа: ${order.id}`,
-      ...order.lines.map((line) => {
-        const name = line.name?.ru ?? items.find((item) => item.product.id === line.id)?.product.name.ru ?? line.id;
-        const lineTotal = (line.price * line.qty).toLocaleString('ru-RU');
-        return `• ${name} × ${line.qty} — ${lineTotal} с`;
-      }),
-      `Итого: ${order.total.toLocaleString('ru-RU')} с`,
-      ...(comment ? [`Комментарий: ${comment}`] : []),
-    ].join('\n');
-
-    window.open(`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
+    window.open(whatsappUrl(order, orderComment), '_blank', 'noopener');
     setWhatsappDialogOpen(false);
   };
 
@@ -95,7 +82,7 @@ export default function CartPage() {
       <div className="md:grid md:grid-cols-[1fr_22rem] md:items-start md:gap-6">
         <ul className="space-y-3">
           {items.map((item) => (
-            <CartItem key={item.product.id} item={item} />
+            <CartItem key={item.key} item={item} />
           ))}
         </ul>
 
@@ -136,15 +123,15 @@ export default function CartPage() {
       </div>
 
       {whatsappDialogOpen && (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-labelledby="whatsapp-order-title">
+        <div className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-12 sm:pt-20" role="dialog" aria-modal="true" aria-labelledby="whatsapp-order-title">
           <button
             type="button"
             className="fade-in absolute inset-0 cursor-default bg-black/60"
             onClick={() => setWhatsappDialogOpen(false)}
             aria-label={t('nav.close')}
           />
-          <section className="sheet-up relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-bg shadow-2xl sm:rounded-[2rem]">
-            <header className="flex items-center justify-between border-b border-line px-5 py-4">
+          <section className="relative flex max-h-[75vh] w-full max-w-md flex-col overflow-hidden rounded-[2rem] bg-bg shadow-2xl">
+            <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-bg/95 px-5 py-4 backdrop-blur-sm">
               <h2 id="whatsapp-order-title" className="font-display text-xl">{t('cart.whatsappTitle')}</h2>
               <button
                 type="button"
@@ -155,14 +142,17 @@ export default function CartPage() {
                 <X size={22} />
               </button>
             </header>
-            <div className="overflow-y-auto px-5 py-4">
+            <div className="overflow-y-auto overscroll-contain px-5 py-4">
               <ul className="divide-y divide-line">
                 {items.map((item) => (
-                  <li key={item.product.id} className="flex items-start justify-between gap-3 py-3 first:pt-0">
+                  <li key={item.key} className="flex items-start justify-between gap-3 py-3 first:pt-0">
                     <div className="min-w-0 flex-1">
-                      <p className="font-bold leading-snug">{tr(item.product.name)}</p>
+                      <p className="font-bold leading-snug">
+                        {tr(item.product.name)}
+                        {item.variant && <span className="text-brand"> · {tr(item.variant.label)}</span>}
+                      </p>
                       <p className="mt-1 text-sm text-mute">
-                        {item.qty} × {money(item.product.price)}
+                        {item.qty} × {money(item.unitPrice)}
                       </p>
                     </div>
                     <p className="shrink-0 font-extrabold tabular-nums">{money(item.sum)}</p>
@@ -184,7 +174,7 @@ export default function CartPage() {
                 />
               </label>
             </div>
-            <footer className="grid gap-2 border-t border-line bg-bg p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:grid-cols-2">
+            <footer className="sticky bottom-0 z-10 grid grid-cols-2 gap-2 border-t border-line bg-bg/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
               <button
                 type="button"
                 onClick={handleWhatsAppSend}
