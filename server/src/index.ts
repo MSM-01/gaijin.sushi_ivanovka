@@ -9,6 +9,8 @@ import { z } from 'zod';
 import { prisma } from './db.js';
 import { GoPayProvider } from './integrations/gopay.js';
 import { Paloma365Adapter } from './integrations/paloma.js';
+import Anthropic from '@anthropic-ai/sdk';
+import { translateMenuText, TranslationUnavailableError } from './integrations/translate.js';
 
 const app = express();
 app.use(helmet());
@@ -246,6 +248,41 @@ const productSchema = z.object({
   available: z.boolean(),
   active: z.boolean(),
   sortOrder: z.number().int().min(0).max(10_000),
+});
+
+const translateSchema = z.object({
+  nameRu: z.string().trim().min(1).max(160),
+  descriptionRu: z.string().max(2000).optional().default(''),
+});
+
+const translateLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Слишком много запросов перевода. Подождите минуту.' },
+});
+
+// Автоперевод названия и описания с русского на английский и кыргызский.
+app.post('/api/admin/translate', requireAdmin, translateLimiter, async (req, res) => {
+  const parsed = translateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Укажите название на русском.' });
+  try {
+    res.json(await translateMenuText(parsed.data.nameRu, parsed.data.descriptionRu));
+  } catch (error) {
+    if (error instanceof TranslationUnavailableError) {
+      return res.status(503).json({ error: error.message });
+    }
+    if (error instanceof Anthropic.RateLimitError) {
+      return res.status(429).json({ error: 'Сервис перевода перегружен. Попробуйте через минуту.' });
+    }
+    if (error instanceof Anthropic.AuthenticationError) {
+      console.error('admin.translate.auth', error.message);
+      return res.status(503).json({ error: 'Неверный ключ ANTHROPIC_API_KEY на сервере.' });
+    }
+    console.error('admin.translate', error);
+    res.status(502).json({ error: 'Не удалось перевести автоматически. Заполните переводы вручную.' });
+  }
 });
 
 app.get('/api/admin/catalog', requireAdmin, async (_req, res) => {

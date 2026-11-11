@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { ImagePlus, LogOut, Plus, Save, Trash2, X } from 'lucide-react';
+import { ImagePlus, Languages, LogOut, Plus, Save, Trash2, X } from 'lucide-react';
 import ProductImage from '../components/ProductImage';
 import { apiRequest, uploadBinary } from '../lib/api';
 import { compressImage } from '../lib/image';
@@ -30,6 +30,31 @@ interface AdminProduct {
   available: boolean;
   active: boolean;
   sortOrder: number;
+}
+
+interface Translation {
+  nameEn: string;
+  nameKy: string;
+  descriptionEn: string;
+  descriptionKy: string;
+}
+
+/** Переводит русский текст на английский и кыргызский через API (Claude). */
+function requestTranslation(nameRu: string, descriptionRu = ''): Promise<Translation> {
+  return apiRequest<Translation>('/admin/translate', {
+    method: 'POST',
+    body: JSON.stringify({ nameRu, descriptionRu }),
+  });
+}
+
+/** Нужен ли автоперевод: есть русский текст, но пусто в английском или кыргызском. */
+function needsTranslation(form: { nameRu: string; nameEn: string; nameKy: string; descriptionRu?: string; descriptionEn?: string; descriptionKy?: string }) {
+  const hasDescription = Boolean(form.descriptionRu?.trim());
+  return (
+    !form.nameEn.trim() ||
+    !form.nameKy.trim() ||
+    (hasDescription && (!form.descriptionEn?.trim() || !form.descriptionKy?.trim()))
+  );
 }
 
 interface Catalog {
@@ -88,6 +113,7 @@ export default function AdminPage() {
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [translating, setTranslating] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [imageUploadError, setImageUploadError] = useState('');
   const [imagePreview, setImagePreview] = useState('');
@@ -173,9 +199,20 @@ export default function AdminPage() {
   const handleCategorySubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await runAction(async () => {
+      let form = categoryForm;
+      // Пустые переводы заполняем автоматически, заполненные вручную не трогаем.
+      if (needsTranslation(form)) {
+        const translation = await requestTranslation(form.nameRu);
+        form = {
+          ...form,
+          nameEn: form.nameEn.trim() || translation.nameEn,
+          nameKy: form.nameKy.trim() || translation.nameKy,
+        };
+        setCategoryForm(form);
+      }
       await apiRequest(`/admin/categories${editingCategoryId ? `/${editingCategoryId}` : ''}`, {
         method: editingCategoryId ? 'PUT' : 'POST',
-        body: JSON.stringify(categoryForm),
+        body: JSON.stringify(form),
       });
       await loadCatalog();
       await useMenuStore.getState().refresh();
@@ -187,9 +224,22 @@ export default function AdminPage() {
   const handleProductSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await runAction(async () => {
+      let form = productForm;
+      // Пустые переводы заполняем автоматически, заполненные вручную не трогаем.
+      if (needsTranslation(form)) {
+        const translation = await requestTranslation(form.nameRu, form.descriptionRu);
+        form = {
+          ...form,
+          nameEn: form.nameEn.trim() || translation.nameEn,
+          nameKy: form.nameKy.trim() || translation.nameKy,
+          descriptionEn: form.descriptionEn.trim() || translation.descriptionEn,
+          descriptionKy: form.descriptionKy.trim() || translation.descriptionKy,
+        };
+        setProductForm(form);
+      }
       await apiRequest(`/admin/products${editingProductId ? `/${editingProductId}` : ''}`, {
         method: editingProductId ? 'PUT' : 'POST',
-        body: JSON.stringify({ ...productForm, imageUrl: productForm.imageUrl.trim() || null }),
+        body: JSON.stringify({ ...form, imageUrl: form.imageUrl.trim() || null }),
       });
       await loadCatalog();
       await useMenuStore.getState().refresh();
@@ -197,6 +247,45 @@ export default function AdminPage() {
       setEditingProductId(null);
       setImagePreview('');
     }, editingProductId ? 'Блюдо обновлено.' : 'Блюдо добавлено.');
+  };
+
+  // Кнопка «Перевести»: перезаписывает английский и кыргызский текст свежим переводом.
+  const translateCategory = async () => {
+    if (!categoryForm.nameRu.trim()) {
+      setError('Сначала напишите название на русском.');
+      return;
+    }
+    setTranslating(true);
+    setError('');
+    setNotice('');
+    try {
+      const translation = await requestTranslation(categoryForm.nameRu);
+      setCategoryForm((current) => ({ ...current, nameEn: translation.nameEn, nameKy: translation.nameKy }));
+      setNotice('Перевод готов. Проверьте его и сохраните категорию.');
+    } catch (translateError) {
+      setError(translateError instanceof Error ? translateError.message : 'Не удалось перевести.');
+    } finally {
+      setTranslating(false);
+    }
+  };
+
+  const translateProduct = async () => {
+    if (!productForm.nameRu.trim()) {
+      setError('Сначала напишите название блюда на русском.');
+      return;
+    }
+    setTranslating(true);
+    setError('');
+    setNotice('');
+    try {
+      const translation = await requestTranslation(productForm.nameRu, productForm.descriptionRu);
+      setProductForm((current) => ({ ...current, ...translation }));
+      setNotice('Перевод готов. Проверьте его и сохраните блюдо.');
+    } catch (translateError) {
+      setError(translateError instanceof Error ? translateError.message : 'Не удалось перевести.');
+    } finally {
+      setTranslating(false);
+    }
   };
 
   const handleImageSelect = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -369,20 +458,23 @@ export default function AdminPage() {
                 onChange={(event) => setCategoryForm({ ...categoryForm, nameRu: event.target.value })}
                 className="admin-input"
               />
+              <button type="button" disabled={busy || translating} onClick={() => void translateCategory()} className="btn-secondary min-h-12">
+                <Languages size={18} />
+                {translating ? 'Переводим…' : 'Перевести с русского'}
+              </button>
               <input
-                required
                 aria-label="Название категории на английском"
-                placeholder="Название на английском"
+                placeholder="English — заполнится автоматически"
                 value={categoryForm.nameEn}
                 onChange={(event) => setCategoryForm({ ...categoryForm, nameEn: event.target.value })}
                 className="admin-input"
               />
               <input
                 aria-label="Название категории на кыргызском"
-                placeholder="Название на кыргызском (необязательно)"
+                placeholder="Кыргызча — заполнится автоматически"
                 value={categoryForm.nameKy}
                 onChange={(event) => setCategoryForm({ ...categoryForm, nameKy: event.target.value })}
-                className="admin-input sm:col-span-2"
+                className="admin-input"
               />
               <label className="flex min-h-12 items-center gap-2 text-sm font-semibold">
                 <input
@@ -403,7 +495,7 @@ export default function AdminPage() {
                 />
               </label>
               <div className="flex gap-2">
-                <button type="submit" disabled={busy} className="btn-primary flex-1">
+                <button type="submit" disabled={busy || translating} className="btn-primary flex-1">
                   {editingCategoryId ? <Save size={18} /> : <Plus size={18} />}
                   {editingCategoryId ? 'Сохранить категорию' : 'Добавить категорию'}
                 </button>
@@ -443,23 +535,32 @@ export default function AdminPage() {
                   <input required value={productForm.nameRu} onChange={(event) => setProductForm({ ...productForm, nameRu: event.target.value })} className="admin-input" />
                 </label>
                 <label className="admin-label">
-                  Название на английском
-                  <input required value={productForm.nameEn} onChange={(event) => setProductForm({ ...productForm, nameEn: event.target.value })} className="admin-input" />
-                </label>
-                <label className="admin-label sm:col-span-2">
-                  Название на кыргызском (необязательно)
-                  <input value={productForm.nameKy} onChange={(event) => setProductForm({ ...productForm, nameKy: event.target.value })} className="admin-input" />
-                </label>
-                <label className="admin-label">
                   Описание на русском
                   <textarea rows={3} value={productForm.descriptionRu} onChange={(event) => setProductForm({ ...productForm, descriptionRu: event.target.value })} className="admin-input" />
+                </label>
+                <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+                  <button type="button" disabled={busy || translating} onClick={() => void translateProduct()} className="btn-secondary min-h-12">
+                    <Languages size={18} />
+                    {translating ? 'Переводим…' : 'Перевести с русского'}
+                  </button>
+                  <p className="text-xs text-mute">
+                    Пустые поля на английском и кыргызском заполнятся автоматически при сохранении.
+                  </p>
+                </div>
+                <label className="admin-label">
+                  Название на английском
+                  <input value={productForm.nameEn} onChange={(event) => setProductForm({ ...productForm, nameEn: event.target.value })} className="admin-input" />
+                </label>
+                <label className="admin-label">
+                  Название на кыргызском
+                  <input value={productForm.nameKy} onChange={(event) => setProductForm({ ...productForm, nameKy: event.target.value })} className="admin-input" />
                 </label>
                 <label className="admin-label">
                   Описание на английском
                   <textarea rows={3} value={productForm.descriptionEn} onChange={(event) => setProductForm({ ...productForm, descriptionEn: event.target.value })} className="admin-input" />
                 </label>
-                <label className="admin-label sm:col-span-2">
-                  Описание на кыргызском (необязательно)
+                <label className="admin-label">
+                  Описание на кыргызском
                   <textarea rows={3} value={productForm.descriptionKy} onChange={(event) => setProductForm({ ...productForm, descriptionKy: event.target.value })} className="admin-input" />
                 </label>
                 <label className="admin-label">
@@ -528,7 +629,7 @@ export default function AdminPage() {
                   Показывать блюдо в меню
                 </label>
                 <div className="flex gap-2 sm:col-span-2">
-                  <button type="submit" disabled={busy || imageUploading} className="btn-primary flex-1">
+                  <button type="submit" disabled={busy || imageUploading || translating} className="btn-primary flex-1">
                     {editingProductId ? <Save size={18} /> : <Plus size={18} />}
                     {editingProductId ? 'Сохранить блюдо' : 'Добавить блюдо'}
                   </button>
