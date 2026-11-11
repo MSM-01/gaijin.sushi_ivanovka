@@ -39,7 +39,7 @@ interface Translation {
   descriptionKy: string;
 }
 
-/** Переводит русский текст на английский и кыргызский через API (Claude). */
+/** Переводит русский текст на английский и кыргызский через API сервера (Gemini). */
 function requestTranslation(nameRu: string, descriptionRu = ''): Promise<Translation> {
   return apiRequest<Translation>('/admin/translate', {
     method: 'POST',
@@ -47,14 +47,52 @@ function requestTranslation(nameRu: string, descriptionRu = ''): Promise<Transla
   });
 }
 
-/** Нужен ли автоперевод: есть русский текст, но пусто в английском или кыргызском. */
-function needsTranslation(form: { nameRu: string; nameEn: string; nameKy: string; descriptionRu?: string; descriptionEn?: string; descriptionKy?: string }) {
+interface TextFields {
+  nameRu: string;
+  nameEn: string;
+  nameKy: string;
+  descriptionRu?: string;
+  descriptionEn?: string;
+  descriptionKy?: string;
+}
+
+type TranslationField = keyof Translation;
+
+/**
+ * Какие переводы нужно заполнить при сохранении:
+ * - пустые поля (новое блюдо или перевод ещё не делали);
+ * - поля, у которых изменился русский текст, если админ не поправил перевод вручную в этой же правке.
+ * Перевод, который админ изменил в форме сам, не перезаписывается.
+ */
+function fieldsToTranslate(form: TextFields, original?: TextFields | null): TranslationField[] {
+  const fields: TranslationField[] = [];
+  const same = (a?: string, b?: string) => (a ?? '').trim() === (b ?? '').trim();
+  const nameChanged = original ? !same(form.nameRu, original.nameRu) : false;
+  const descriptionChanged = original ? !same(form.descriptionRu, original.descriptionRu) : false;
   const hasDescription = Boolean(form.descriptionRu?.trim());
-  return (
-    !form.nameEn.trim() ||
-    !form.nameKy.trim() ||
-    (hasDescription && (!form.descriptionEn?.trim() || !form.descriptionKy?.trim()))
-  );
+
+  for (const field of ['nameEn', 'nameKy'] as const) {
+    const untouched = original ? same(form[field], original[field]) : true;
+    if (!form[field].trim() || (nameChanged && untouched)) fields.push(field);
+  }
+  if (form.descriptionRu !== undefined) {
+    for (const field of ['descriptionEn', 'descriptionKy'] as const) {
+      const untouched = original ? same(form[field], original[field]) : true;
+      const empty = !form[field]?.trim();
+      if ((hasDescription && empty) || (descriptionChanged && untouched)) fields.push(field);
+    }
+  }
+  return fields;
+}
+
+/** Дополняет форму автопереводом для нужных полей. Возвращает форму без изменений, если переводить нечего. */
+async function withTranslations<T extends TextFields>(form: T, original?: TextFields | null): Promise<T> {
+  const fields = fieldsToTranslate(form, original);
+  if (fields.length === 0) return form;
+  const translation = await requestTranslation(form.nameRu, form.descriptionRu ?? '');
+  const updates: Partial<Translation> = {};
+  for (const field of fields) updates[field] = translation[field];
+  return { ...form, ...updates };
 }
 
 interface Catalog {
@@ -199,17 +237,9 @@ export default function AdminPage() {
   const handleCategorySubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await runAction(async () => {
-      let form = categoryForm;
-      // Пустые переводы заполняем автоматически, заполненные вручную не трогаем.
-      if (needsTranslation(form)) {
-        const translation = await requestTranslation(form.nameRu);
-        form = {
-          ...form,
-          nameEn: form.nameEn.trim() || translation.nameEn,
-          nameKy: form.nameKy.trim() || translation.nameKy,
-        };
-        setCategoryForm(form);
-      }
+      const original = catalog.categories.find((category) => category.id === editingCategoryId);
+      const form = await withTranslations(categoryForm, original);
+      if (form !== categoryForm) setCategoryForm(form);
       await apiRequest(`/admin/categories${editingCategoryId ? `/${editingCategoryId}` : ''}`, {
         method: editingCategoryId ? 'PUT' : 'POST',
         body: JSON.stringify(form),
@@ -224,19 +254,9 @@ export default function AdminPage() {
   const handleProductSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await runAction(async () => {
-      let form = productForm;
-      // Пустые переводы заполняем автоматически, заполненные вручную не трогаем.
-      if (needsTranslation(form)) {
-        const translation = await requestTranslation(form.nameRu, form.descriptionRu);
-        form = {
-          ...form,
-          nameEn: form.nameEn.trim() || translation.nameEn,
-          nameKy: form.nameKy.trim() || translation.nameKy,
-          descriptionEn: form.descriptionEn.trim() || translation.descriptionEn,
-          descriptionKy: form.descriptionKy.trim() || translation.descriptionKy,
-        };
-        setProductForm(form);
-      }
+      const original = catalog.products.find((product) => product.id === editingProductId);
+      const form = await withTranslations(productForm, original);
+      if (form !== productForm) setProductForm(form);
       await apiRequest(`/admin/products${editingProductId ? `/${editingProductId}` : ''}`, {
         method: editingProductId ? 'PUT' : 'POST',
         body: JSON.stringify({ ...form, imageUrl: form.imageUrl.trim() || null }),
@@ -544,7 +564,7 @@ export default function AdminPage() {
                     {translating ? 'Переводим…' : 'Перевести с русского'}
                   </button>
                   <p className="text-xs text-mute">
-                    Пустые поля на английском и кыргызском заполнятся автоматически при сохранении.
+                    При сохранении пустые переводы заполнятся сами, а если вы изменили русский текст — обновятся. Перевод, который вы поправили вручную в этой же правке, останется как есть.
                   </p>
                 </div>
                 <label className="admin-label">

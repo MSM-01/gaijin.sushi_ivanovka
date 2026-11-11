@@ -9,8 +9,7 @@ import { z } from 'zod';
 import { prisma } from './db.js';
 import { GoPayProvider } from './integrations/gopay.js';
 import { Paloma365Adapter } from './integrations/paloma.js';
-import Anthropic from '@anthropic-ai/sdk';
-import { translateMenuText, TranslationUnavailableError } from './integrations/translate.js';
+import { translateMenuText, TranslationRateLimitError, TranslationUnavailableError } from './integrations/translate.js';
 
 const app = express();
 app.use(helmet());
@@ -273,12 +272,8 @@ app.post('/api/admin/translate', requireAdmin, translateLimiter, async (req, res
     if (error instanceof TranslationUnavailableError) {
       return res.status(503).json({ error: error.message });
     }
-    if (error instanceof Anthropic.RateLimitError) {
-      return res.status(429).json({ error: 'Сервис перевода перегружен. Попробуйте через минуту.' });
-    }
-    if (error instanceof Anthropic.AuthenticationError) {
-      console.error('admin.translate.auth', error.message);
-      return res.status(503).json({ error: 'Неверный ключ ANTHROPIC_API_KEY на сервере.' });
+    if (error instanceof TranslationRateLimitError) {
+      return res.status(429).json({ error: error.message });
     }
     console.error('admin.translate', error);
     res.status(502).json({ error: 'Не удалось перевести автоматически. Заполните переводы вручную.' });
