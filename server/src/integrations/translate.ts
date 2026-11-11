@@ -37,32 +37,70 @@ Examples from the current menu:
 - "Сырные палочки" -> English "Cheese Sticks", Kyrgyz "Сыр таякчалары"
 - "Классический ролл с лососем, сливочным сыром и огурцом." -> English "Classic roll with salmon, cream cheese and cucumber.", Kyrgyz "Лосось, каймак сыры жана бадыраң кошулган классикалык ролл."`;
 
+/** JSON Schema ответа (формат из актуальной документации Gemini: типы строчными буквами). */
 const RESPONSE_SCHEMA = {
-  type: 'OBJECT',
+  type: 'object',
   properties: {
-    nameEn: { type: 'STRING', description: 'Dish or category name in English' },
-    nameKy: { type: 'STRING', description: 'Dish or category name in Kyrgyz (Cyrillic)' },
-    descriptionEn: { type: 'STRING', description: 'Description in English, empty if the Russian one is empty' },
-    descriptionKy: { type: 'STRING', description: 'Description in Kyrgyz (Cyrillic), empty if the Russian one is empty' },
+    nameEn: { type: 'string', description: 'Dish or category name in English' },
+    nameKy: { type: 'string', description: 'Dish or category name in Kyrgyz (Cyrillic)' },
+    descriptionEn: { type: 'string', description: 'Description in English, empty if the Russian one is empty' },
+    descriptionKy: { type: 'string', description: 'Description in Kyrgyz (Cyrillic), empty if the Russian one is empty' },
   },
   required: ['nameEn', 'nameKy', 'descriptionEn', 'descriptionKy'],
-  propertyOrdering: ['nameEn', 'nameKy', 'descriptionEn', 'descriptionKy'],
 };
 
+const JSON_INSTRUCTION = `Reply with a single JSON object only, no markdown, with exactly these string fields: "nameEn", "nameKy", "descriptionEn", "descriptionKy".`;
+
 /**
- * Модели по порядку. Если первая недоступна (нет в API или исчерпан бесплатный лимит),
- * пробуем следующую. GEMINI_MODEL в .env позволяет поставить свою модель первой.
+ * Модели по порядку. Если модель недоступна или исчерпан её бесплатный лимит, пробуем следующую.
+ * GEMINI_MODEL в .env позволяет поставить свою модель первой.
  */
 function modelChain(): string[] {
-  const models = [process.env.GEMINI_MODEL?.trim(), 'gemini-3.8-flash', 'gemini-2.5-flash'];
+  const models = [process.env.GEMINI_MODEL?.trim(), 'gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
   return [...new Set(models.filter((model): model is string => Boolean(model)))];
 }
 
-const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Варианты настроек ответа, от основного к запасному. Google меняет формат API, поэтому при ошибке 400
+ * пробуем следующий вариант: сначала REST-формат из документации, затем формат SDK, затем просто JSON.
+ */
+const GENERATION_CONFIGS: Record<string, unknown>[] = [
+  { responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: RESPONSE_SCHEMA } }, thinkingConfig: { thinkingLevel: 'low' } },
+  { responseMimeType: 'application/json', responseJsonSchema: RESPONSE_SCHEMA },
+  { responseMimeType: 'application/json' },
+];
 
+const REQUEST_TIMEOUT_MS = 60_000;
+
+/** Ошибка, после которой стоит попробовать следующую модель. */
 class ModelUnavailableError extends Error {}
+/** Ошибка формата запроса (400), после которой стоит попробовать другие настройки. */
+class BadRequestError extends Error {}
 
-async function callGemini(model: string, apiKey: string, nameRu: string, descriptionRu: string): Promise<Translation> {
+function googleErrorMessage(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string; status?: string } };
+    if (parsed.error?.message) return `${parsed.error.status ?? ''} ${parsed.error.message}`.trim().slice(0, 300);
+  } catch {
+    /* не JSON */
+  }
+  return body.slice(0, 300);
+}
+
+function parseJsonText(text: string): unknown {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  return JSON.parse(start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned);
+}
+
+async function callGemini(
+  model: string,
+  apiKey: string,
+  generationConfig: Record<string, unknown>,
+  nameRu: string,
+  descriptionRu: string,
+): Promise<Translation> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   let response: Response;
   try {
@@ -71,51 +109,49 @@ async function callGemini(model: string, apiKey: string, nameRu: string, descrip
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        systemInstruction: { parts: [{ text: `${SYSTEM_PROMPT}\n\n${JSON_INSTRUCTION}` }] },
         contents: [
           {
             role: 'user',
             parts: [{ text: `Название (RU): ${nameRu}\nОписание (RU): ${descriptionRu || '(пусто)'}` }],
           },
         ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-        },
+        generationConfig,
       }),
     });
   } catch (error) {
-    throw new Error(`Gemini (${model}) не ответил.`, { cause: error });
+    throw new ModelUnavailableError(`${model}: нет ответа от Gemini (${error instanceof Error ? error.message : error}).`);
   }
 
-  if (response.status === 400 || response.status === 401 || response.status === 403) {
-    const body = await response.text();
-    // Неверный или отключённый ключ — менять модель бессмысленно.
-    if (/API_KEY|PERMISSION_DENIED|API key/i.test(body)) {
-      console.error('gemini.auth', response.status, body.slice(0, 500));
-      throw new TranslationUnavailableError('Неверный ключ GEMINI_API_KEY на сервере.');
-    }
-    throw new Error(`Gemini (${model}) вернул ошибку ${response.status}: ${body.slice(0, 300)}`);
-  }
-  if (response.status === 404) throw new ModelUnavailableError(`Модель ${model} недоступна.`);
-  if (response.status === 429) throw new TranslationRateLimitError('Исчерпан лимит бесплатного перевода. Попробуйте через минуту.');
   if (!response.ok) {
-    throw new Error(`Gemini (${model}) вернул ошибку ${response.status}: ${(await response.text()).slice(0, 300)}`);
+    const detail = googleErrorMessage(await response.text());
+    if (response.status === 401 || response.status === 403 || /API_KEY|API key/i.test(detail)) {
+      throw new TranslationUnavailableError(`Gemini не принял ключ GEMINI_API_KEY: ${detail}`);
+    }
+    if (response.status === 429) throw new TranslationRateLimitError(`Исчерпан бесплатный лимит Gemini. Попробуйте через минуту. (${detail})`);
+    if (response.status === 400) throw new BadRequestError(`${model}: ${detail}`);
+    throw new ModelUnavailableError(`${model}: ошибка ${response.status}: ${detail}`);
   }
 
   const payload = (await response.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
+    promptFeedback?: { blockReason?: string };
   };
-  const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
+  const candidate = payload.candidates?.[0];
+  const text = candidate?.content?.parts?.filter((part) => !part.thought).map((part) => part.text ?? '').join('') ?? '';
+  if (!text) {
+    throw new ModelUnavailableError(
+      `${model}: пустой ответ (finishReason: ${candidate?.finishReason ?? payload.promptFeedback?.blockReason ?? 'нет'}).`,
+    );
+  }
   let json: unknown;
   try {
-    json = JSON.parse(text);
+    json = parseJsonText(text);
   } catch {
-    throw new Error(`Gemini (${model}) вернул не JSON (finishReason: ${payload.candidates?.[0]?.finishReason ?? 'нет'}).`);
+    throw new BadRequestError(`${model}: ответ не в формате JSON.`);
   }
   const parsed = TranslationSchema.safeParse(json);
-  if (!parsed.success) throw new Error(`Gemini (${model}) вернул неполный перевод.`);
+  if (!parsed.success) throw new BadRequestError(`${model}: в ответе не хватает полей перевода.`);
   return parsed.data;
 }
 
@@ -125,21 +161,28 @@ export async function translateMenuText(nameRu: string, descriptionRu: string): 
     throw new TranslationUnavailableError('Автоперевод не настроен: на сервере не задан GEMINI_API_KEY.');
   }
 
-  let lastError: unknown;
+  const errors: string[] = [];
+  let rateLimited: TranslationRateLimitError | null = null;
   for (const model of modelChain()) {
-    try {
-      const result = await callGemini(model, apiKey, nameRu, descriptionRu);
-      if (!descriptionRu.trim()) {
-        result.descriptionEn = '';
-        result.descriptionKy = '';
+    for (const generationConfig of GENERATION_CONFIGS) {
+      try {
+        const result = await callGemini(model, apiKey, generationConfig, nameRu, descriptionRu);
+        if (!descriptionRu.trim()) {
+          result.descriptionEn = '';
+          result.descriptionKy = '';
+        }
+        return result;
+      } catch (error) {
+        if (error instanceof TranslationUnavailableError) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn('gemini.translate', message);
+        errors.push(message);
+        if (error instanceof TranslationRateLimitError) rateLimited = error;
+        // Неверный формат запроса — пробуем другие настройки этой же модели, иначе — следующую модель.
+        if (!(error instanceof BadRequestError)) break;
       }
-      return result;
-    } catch (error) {
-      if (error instanceof TranslationUnavailableError) throw error;
-      console.warn('gemini.model', model, error instanceof Error ? error.message : error);
-      lastError = error;
     }
   }
-  if (lastError instanceof TranslationRateLimitError) throw lastError;
-  throw new Error('Не удалось перевести автоматически.', { cause: lastError });
+  if (rateLimited) throw rateLimited;
+  throw new Error(`Не удалось перевести автоматически. ${errors.at(-1) ?? ''}`.trim());
 }

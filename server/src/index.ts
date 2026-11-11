@@ -276,7 +276,8 @@ app.post('/api/admin/translate', requireAdmin, translateLimiter, async (req, res
       return res.status(429).json({ error: error.message });
     }
     console.error('admin.translate', error);
-    res.status(502).json({ error: 'Не удалось перевести автоматически. Заполните переводы вручную.' });
+    const detail = error instanceof Error ? error.message : 'Не удалось перевести автоматически.';
+    res.status(502).json({ error: `${detail} Заполните переводы вручную или попробуйте ещё раз.` });
   }
 });
 
