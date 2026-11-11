@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type Theme = 'light' | 'dark';
-export type Lang = 'ru' | 'en';
+export type Lang = 'ru' | 'ky' | 'en';
 
 const THEME_KEY = 'gaijin-theme';
 const LANG_KEY = 'gaijin-lang';
@@ -42,7 +42,7 @@ interface SettingsState {
 }
 
 const initialTheme = read<Theme>(THEME_KEY, ['light', 'dark'], 'light');
-const initialLang = read<Lang>(LANG_KEY, ['ru', 'en'], 'ru');
+const initialLang = read<Lang>(LANG_KEY, ['ru', 'ky', 'en'], 'ru');
 applyTheme(initialTheme);
 applyLang(initialLang);
 

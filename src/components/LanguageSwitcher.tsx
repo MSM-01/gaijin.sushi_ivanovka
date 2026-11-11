@@ -1,7 +1,8 @@
 import { useSettings, type Lang } from '../store/settings';
 import { useI18n } from '../i18n/useI18n';
 
-const LANGS: Lang[] = ['ru', 'en'];
+const LANGS: Lang[] = ['ru', 'ky', 'en'];
+const LABELS: Record<Lang, string> = { ru: 'RU', ky: 'KG', en: 'EN' };
 
 export default function LanguageSwitcher() {
   const lang = useSettings((s) => s.lang);
@@ -19,11 +20,12 @@ export default function LanguageSwitcher() {
           type="button"
           onClick={() => setLang(l)}
           aria-pressed={lang === l}
+          lang={l}
           className={`h-9 rounded-full px-2.5 text-xs font-extrabold uppercase transition ${
             lang === l ? 'bg-brand text-white shadow' : 'text-mute hover:text-ink'
           }`}
         >
-          {l}
+          {LABELS[l]}
         </button>
       ))}
     </div>

@@ -60,6 +60,7 @@ model Category {
   externalId     String?   @unique
   nameRu         String
   nameEn         String
+  nameKy         String    @default("")
   sortOrder      Int       @default(0)
   active         Boolean   @default(true)
   products       Product[]
@@ -73,8 +74,10 @@ model Product {
   category       Category  @relation(fields: [categoryId], references: [id])
   nameRu         String
   nameEn         String
+  nameKy         String    @default("")
   descriptionRu  String    @default("")
   descriptionEn  String    @default("")
+  descriptionKy  String    @default("")
   priceKgs       Int
   imageUrl       String?
   available      Boolean   @default(true)

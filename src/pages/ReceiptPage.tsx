@@ -33,7 +33,7 @@ function loadSizeIndex(): number {
 function ReceiptBody({ order, size, large }: { order: Order; size: number; large?: boolean }) {
   const { t, tr, lang, money } = useI18n();
   const products = useMenuStore((s) => s.products);
-  const date = new Date(order.createdAt).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-GB', {
+  const date = new Date(order.createdAt).toLocaleString(lang === 'en' ? 'en-GB' : 'ru-RU', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

@@ -21,13 +21,13 @@ export function useI18n() {
     [lang],
   );
 
-  /** Выбирает нужный язык из пары { ru, en }. */
+  /** Выбирает нужный язык из { ru, en, ky }; если перевода нет — показывает русский. */
   const tr = useCallback((value: L10n) => value[lang] || value.ru, [lang]);
 
   /** Форматирует цену: «1 099 с» / «1,099 KGS». */
   const money = useCallback(
     (value: number) =>
-      `${value.toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US')} ${translations[lang]['currency']}`,
+      `${value.toLocaleString(lang === 'en' ? 'en-US' : 'ru-RU')} ${translations[lang]['currency']}`,
     [lang],
   );
 

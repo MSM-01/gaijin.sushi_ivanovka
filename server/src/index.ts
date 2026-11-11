@@ -207,13 +207,13 @@ app.get('/api/menu', async (_req, res) => {
     res.json({
       categories: categories.map((category) => ({
         id: category.externalId ?? category.id,
-        name: { ru: category.nameRu, en: category.nameEn },
+        name: { ru: category.nameRu, en: category.nameEn, ky: category.nameKy },
       })),
       products: products.map((product) => ({
         id: product.externalId ?? product.id,
         category: product.category.externalId ?? product.category.id,
-        name: { ru: product.nameRu, en: product.nameEn },
-        description: { ru: product.descriptionRu, en: product.descriptionEn },
+        name: { ru: product.nameRu, en: product.nameEn, ky: product.nameKy },
+        description: { ru: product.descriptionRu, en: product.descriptionEn, ky: product.descriptionKy },
         price: product.priceKgs,
         image: product.imageUrl ?? '',
         available: product.available,
@@ -228,6 +228,7 @@ app.get('/api/menu', async (_req, res) => {
 const categorySchema = z.object({
   nameRu: z.string().trim().min(1).max(120),
   nameEn: z.string().trim().min(1).max(120),
+  nameKy: z.string().trim().max(120).optional().default(''),
   active: z.boolean(),
   sortOrder: z.number().int().min(0).max(10_000),
 });
@@ -236,8 +237,10 @@ const productSchema = z.object({
   categoryId: z.string().min(1),
   nameRu: z.string().trim().min(1).max(160),
   nameEn: z.string().trim().min(1).max(160),
+  nameKy: z.string().trim().max(160).optional().default(''),
   descriptionRu: z.string().max(2000),
   descriptionEn: z.string().max(2000),
+  descriptionKy: z.string().max(2000).optional().default(''),
   priceKgs: z.number().int().min(1).max(10_000_000),
   imageUrl: z.string().trim().max(1000).nullable(),
   available: z.boolean(),

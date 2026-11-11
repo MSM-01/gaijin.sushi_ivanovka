@@ -40,7 +40,9 @@ export default function MenuPage() {
     const q = query.trim().toLowerCase();
     if (!q) return [];
     return products.filter((p) =>
-      [p.name.ru, p.name.en, p.description.ru, p.description.en].some((s) => s.toLowerCase().includes(q)),
+      [p.name.ru, p.name.en, p.name.ky, p.description.ru, p.description.en, p.description.ky].some(
+        (s) => s?.toLowerCase().includes(q),
+      ),
     );
   }, [products, query]);
 

@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "Category" ADD COLUMN "nameKy" TEXT NOT NULL DEFAULT '';
+
+-- AlterTable
+ALTER TABLE "Product" ADD COLUMN "nameKy" TEXT NOT NULL DEFAULT '',
+ADD COLUMN "descriptionKy" TEXT NOT NULL DEFAULT '';

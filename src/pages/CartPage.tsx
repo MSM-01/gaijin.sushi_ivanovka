@@ -65,14 +65,14 @@ export default function CartPage() {
   return (
     <div className="px-4 py-5 sm:px-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="font-display text-2xl">Корзина</h1>
+        <h1 className="font-display text-2xl">{t('cart.title')}</h1>
         <button
           type="button"
           onClick={handleClear}
           className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-bold text-mute transition hover:bg-surface hover:text-brand"
         >
           <Trash2 size={17} />
-          Очистить корзину
+          {t('cart.clear')}
         </button>
       </div>
 
@@ -89,7 +89,7 @@ export default function CartPage() {
         <section className="sticky top-24 z-20 mt-5 space-y-4 md:mt-0">
           
           <div className="rounded-3xl border border-line bg-bg p-6 shadow-sm">
-            <h2 className="font-display text-xl font-bold">Проверьте заказ</h2>
+            <h2 className="font-display text-xl font-bold">{t('cart.whatsappTitle')}</h2>
             
             <div className="mt-4 max-h-60 overflow-y-auto divide-y divide-line pr-1">
               {items.map((item) => (
@@ -106,22 +106,22 @@ export default function CartPage() {
             </div>
 
             <div className="mt-4 flex items-center justify-between border-t border-line pt-4 text-mute text-sm">
-              <span>Позиций</span>
-              <span className="font-bold tabular-nums">{count} шт.</span>
+              <span>{t('cart.positions')}</span>
+              <span className="font-bold tabular-nums">{count} {t('cart.pcs')}</span>
             </div>
             
             <div className="mt-2 flex items-end justify-between">
-              <span className="text-base font-bold">Итого</span>
+              <span className="text-base font-bold">{t('cart.total')}</span>
               <span className="text-2xl font-extrabold text-brand tabular-nums">{money(total)}</span>
             </div>
 
             <div className="mt-4">
               <label className="block text-xs font-bold text-mute">
-                Комментарий к заказу
+                {t('cart.orderComment')}
                 <textarea
                   value={orderComment}
                   onChange={(event) => setOrderComment(event.target.value.slice(0, 500))}
-                  placeholder="Например: позвонить по прибытии, без лука..."
+                  placeholder={t('cart.commentPlaceholder')}
                   maxLength={500}
                   rows={2}
                   className="admin-input mt-1.5 w-full resize-y rounded-2xl border border-line bg-surface p-2.5 text-xs outline-none focus:border-brand"
@@ -139,17 +139,17 @@ export default function CartPage() {
                 className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-lg font-extrabold text-white shadow-lg transition hover:bg-[#1fb85a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#25D366]"
               >
                 <MessageCircle size={22} />
-                Отправить заказ в WhatsApp
+                {t('cart.sendWhatsApp')}
               </button>
             )}
             <button type="button" onClick={handleCheckout} className="btn-primary mt-3 min-h-14 w-full text-lg">
               <Maximize size={22} />
-              Показать кассиру
+              {t('cart.checkout')}
             </button>
-            <p className="mt-3 text-center text-xs leading-relaxed text-mute">Оплата на сайте не принимается. Отправьте заказ в WhatsApp или покажите чек на кассе.</p>
+            <p className="mt-3 text-center text-xs leading-relaxed text-mute">{t('cart.checkoutHint')}</p>
             <Link to="/" className="btn-secondary mt-3 w-full">
               <ArrowLeft size={18} />
-              Продолжить покупки
+              {t('cart.continue')}
             </Link>
           </div>
 

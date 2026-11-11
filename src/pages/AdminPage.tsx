@@ -10,6 +10,7 @@ interface AdminCategory {
   id: string;
   nameRu: string;
   nameEn: string;
+  nameKy: string;
   active: boolean;
   sortOrder: number;
 }
@@ -20,8 +21,10 @@ interface AdminProduct {
   category: { nameRu: string };
   nameRu: string;
   nameEn: string;
+  nameKy: string;
   descriptionRu: string;
   descriptionEn: string;
+  descriptionKy: string;
   priceKgs: number;
   imageUrl: string | null;
   available: boolean;
@@ -37,6 +40,7 @@ interface Catalog {
 interface CategoryForm {
   nameRu: string;
   nameEn: string;
+  nameKy: string;
   active: boolean;
   sortOrder: number;
 }
@@ -45,8 +49,10 @@ interface ProductForm {
   categoryId: string;
   nameRu: string;
   nameEn: string;
+  nameKy: string;
   descriptionRu: string;
   descriptionEn: string;
+  descriptionKy: string;
   priceKgs: number;
   imageUrl: string;
   available: boolean;
@@ -54,13 +60,15 @@ interface ProductForm {
   sortOrder: number;
 }
 
-const blankCategory: CategoryForm = { nameRu: '', nameEn: '', active: true, sortOrder: 0 };
+const blankCategory: CategoryForm = { nameRu: '', nameEn: '', nameKy: '', active: true, sortOrder: 0 };
 const blankProduct = (categoryId = ''): ProductForm => ({
   categoryId,
   nameRu: '',
   nameEn: '',
+  nameKy: '',
   descriptionRu: '',
   descriptionEn: '',
+  descriptionKy: '',
   priceKgs: 0,
   imageUrl: '',
   available: true,
@@ -225,6 +233,7 @@ export default function AdminPage() {
     setCategoryForm({
       nameRu: category.nameRu,
       nameEn: category.nameEn,
+      nameKy: category.nameKy ?? '',
       active: category.active,
       sortOrder: category.sortOrder,
     });
@@ -236,8 +245,10 @@ export default function AdminPage() {
       categoryId: product.categoryId,
       nameRu: product.nameRu,
       nameEn: product.nameEn,
+      nameKy: product.nameKy ?? '',
       descriptionRu: product.descriptionRu,
       descriptionEn: product.descriptionEn,
+      descriptionKy: product.descriptionKy ?? '',
       priceKgs: product.priceKgs,
       imageUrl: product.imageUrl ?? '',
       available: product.available,
@@ -257,8 +268,10 @@ export default function AdminPage() {
           categoryId: product.categoryId,
           nameRu: product.nameRu,
           nameEn: product.nameEn,
+          nameKy: product.nameKy ?? '',
           descriptionRu: product.descriptionRu,
           descriptionEn: product.descriptionEn,
+          descriptionKy: product.descriptionKy ?? '',
           priceKgs: product.priceKgs,
           imageUrl: product.imageUrl,
           available: product.available,
@@ -364,6 +377,13 @@ export default function AdminPage() {
                 onChange={(event) => setCategoryForm({ ...categoryForm, nameEn: event.target.value })}
                 className="admin-input"
               />
+              <input
+                aria-label="Название категории на кыргызском"
+                placeholder="Название на кыргызском (необязательно)"
+                value={categoryForm.nameKy}
+                onChange={(event) => setCategoryForm({ ...categoryForm, nameKy: event.target.value })}
+                className="admin-input sm:col-span-2"
+              />
               <label className="flex min-h-12 items-center gap-2 text-sm font-semibold">
                 <input
                   type="checkbox"
@@ -398,7 +418,7 @@ export default function AdminPage() {
               {catalog.categories.map((category) => (
                 <li key={category.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <div>
-                    <p className="font-bold">{category.nameRu} <span className="font-medium text-mute">/ {category.nameEn}</span></p>
+                    <p className="font-bold">{category.nameRu} <span className="font-medium text-mute">/ {category.nameEn}{category.nameKy ? ` / ${category.nameKy}` : ''}</span></p>
                     <p className="text-xs text-mute">{category.active ? 'Опубликована' : 'Скрыта'}</p>
                   </div>
                   <div className="flex gap-2">
@@ -426,6 +446,10 @@ export default function AdminPage() {
                   Название на английском
                   <input required value={productForm.nameEn} onChange={(event) => setProductForm({ ...productForm, nameEn: event.target.value })} className="admin-input" />
                 </label>
+                <label className="admin-label sm:col-span-2">
+                  Название на кыргызском (необязательно)
+                  <input value={productForm.nameKy} onChange={(event) => setProductForm({ ...productForm, nameKy: event.target.value })} className="admin-input" />
+                </label>
                 <label className="admin-label">
                   Описание на русском
                   <textarea rows={3} value={productForm.descriptionRu} onChange={(event) => setProductForm({ ...productForm, descriptionRu: event.target.value })} className="admin-input" />
@@ -433,6 +457,10 @@ export default function AdminPage() {
                 <label className="admin-label">
                   Описание на английском
                   <textarea rows={3} value={productForm.descriptionEn} onChange={(event) => setProductForm({ ...productForm, descriptionEn: event.target.value })} className="admin-input" />
+                </label>
+                <label className="admin-label sm:col-span-2">
+                  Описание на кыргызском (необязательно)
+                  <textarea rows={3} value={productForm.descriptionKy} onChange={(event) => setProductForm({ ...productForm, descriptionKy: event.target.value })} className="admin-input" />
                 </label>
                 <label className="admin-label">
                   Цена (сом)
@@ -518,7 +546,7 @@ export default function AdminPage() {
                 <article key={product.id} className="rounded-2xl border border-line bg-bg p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="font-extrabold">{product.nameRu} <span className="font-medium text-mute">/ {product.nameEn}</span></h3>
+                      <h3 className="font-extrabold">{product.nameRu} <span className="font-medium text-mute">/ {product.nameEn}{product.nameKy ? ` / ${product.nameKy}` : ''}</span></h3>
                       <p className="mt-1 text-sm text-mute">{product.category.nameRu} · {product.priceKgs.toLocaleString('ru-RU')} с</p>
                       <p className="mt-1 text-xs font-bold text-brand">
                         {!product.active ? 'Скрыто' : product.available ? 'Доступно' : 'Временно нет в наличии'}
